@@ -8,12 +8,15 @@
 #include <stdio.h>
 
 // Requires AETR (default on FS-I6)
+// Flysky default values
 struct {
-  int16_t roll, pitch, throttle, yaw;
-  int16_t aux[10];
+  uint16_t roll, pitch, throttle, yaw;
+  uint16_t aux[10];
 } typedef stick_values_t;
 
 extern stick_values_t stick_values;
+
+void initDefaults(stick_values_t * values);
 
 void readChannels(uint8_t * rxPacket, stick_values_t * values);
 

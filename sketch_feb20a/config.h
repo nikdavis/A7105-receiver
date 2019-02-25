@@ -1,5 +1,5 @@
 #define chipSelectPin 10
-#define spiClockSpeed 500000
+#define spiClockSpeed 4000000
 
 #define setbit(value, i) ((value) |= ((1) << (i)))
 #define clearbit(value, i) ((value) &= ~((1) << (i)))

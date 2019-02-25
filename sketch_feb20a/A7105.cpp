@@ -3,9 +3,6 @@
 uint8_t packet[38];
 static int channel = 0;
 
-uint32_t good_frames = 0;
-uint32_t total_frames = 0;
-
 static const uint8_t AFHDS2A_regs[] = {
     -1  , 0x42 | (1<<5), 0x00, 0x25, 0x00,   -1,   -1, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c, 0x05, 0x00, 0x50, // 00 - 0f
     0x9e, 0x4b, 0x00, 0x02, 0x16, 0x2b, 0x12, 0x4f, 0x62, 0x80,   -1,   -1, 0x2a, 0x32, 0xc3, 0x1f, // 10 - 1f
@@ -21,34 +18,49 @@ bool packet_valid() {
   return !((value & (1 << 6)) || (value & (1 << 5)));
 }
 
-void wait_and_read(uint8_t * packetBuffer) {
+void readFromRx(uint8_t * packetBuffer) {
     uint8_t rawPacket[38];
     
     if (channel > 15) { // this code runs once every ~120 msec
         channel = 0;
     }
-
+    
+    noInterrupts();
     writeSingleByte(A7105_STANDBY);
     writeRegister(A7105_0F_PLL_I, my_channels[channel]);
     writeSingleByte(A7105_RX);
-
+    interrupts();
+    delayMicroseconds(140);
+    
     while (1) { // look for data on the current channel
-        if (readRegister(A7105_00_MODE) & A7105_MODE_TRER_MASK) {
-          delayMicroseconds(1000);
-        }
-        else {
+        noInterrupts()
+        uint8_t dataNotReady = readRegister(A7105_00_MODE) & A7105_MODE_TRER_MASK;
+        interrupts();
+        
+        if (!dataNotReady) {
+          noInterrupts()
           writeSingleByte(A7105_RST_RDPTR);
           readRegisterBytes(0x05, rawPacket, 38);
           channel++;
+          interrupts();
+          if (packet_valid() && rawPacket[0] == 0x58) {
+            memcpy(packetBuffer, rawPacket, 38); 
+          }
           break;
        }
     }
 
+//    // If it's likely we missed a packet, then start walking backwards
+//    // on the hopping frequencies to converge on the next hopping loop
+//    if(elapsedTimeInMicros >= 2000) {
+//      channel--;
+//      if(channel < 0) {
+//        channel = 15;
+//      }
+//    }
+    noInterrupts()
     writeSingleByte(A7105_STANDBY);
-
-    if(packet_valid() && rawPacket[0] == 0x58) {
-      memcpy(packetBuffer, rawPacket, 38); 
-    }
+    interrupts()
 }
 
 //returns success or failure

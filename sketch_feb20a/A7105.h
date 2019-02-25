@@ -163,7 +163,7 @@ enum A7105_mode {
 
 uint8_t rebind();
 
-void wait_and_read(uint8_t * packetBuffer);
+void readFromRx(uint8_t * packetBuffer);
 
 int afhds2a_init();
 
