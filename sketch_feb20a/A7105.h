@@ -161,6 +161,8 @@ enum A7105_mode {
 // This can't easily be configured dynamically. 1 for 500kHz, 0 for 250kHz
 #define CHNL_WIDTH 1
 
+void setupRx();
+
 uint8_t rebind();
 
 void readFromRx(uint8_t * packetBuffer);

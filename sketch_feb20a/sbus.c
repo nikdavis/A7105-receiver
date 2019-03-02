@@ -9,9 +9,9 @@ void initDefaults(stick_values_t * values) {
 
 // Read out 14 channels
 void readChannels(uint8_t * rxPacket, stick_values_t * values) {
-  int channelOffset = 9;
-  for (int i = 0; i < NUMBER_OF_TX_CHANNELS; i++) {
-    int index = i * 2 + channelOffset;
+  uint8_t channelOffset = 9;
+  for (uint8_t i = 0; i < NUMBER_OF_TX_CHANNELS; i++) {
+    uint8_t index = i * 2 + channelOffset;
     uint16_t rawChannel = rxPacket[index + 1] << 8;
     rawChannel = rawChannel | rxPacket[index];
     ((uint16_t*)values)[i] = translateFlyskyChannelValueToSbus(rawChannel);
@@ -24,14 +24,14 @@ void buildPacket(uint8_t * outPacket, stick_values_t * values) {
   outPacket[0] = 0x0F;
   outPacket[24] = 0x00;
 
-  int channelCounter = 0;
-  int dataBitCounter = 0;
+  uint8_t channelCounter = 0;
+  uint8_t dataBitCounter = 0;
   uint16_t dataValue = ((uint16_t*)values)[channelCounter];
   // Channels represent middle 22 bytes -- 16 channels * 11 bits. They
   // are ordered by lowest channel and LSB first in LSB / lowest byte
   // of outgoing packet
-  for( int i = 1; i < 23; i++) {
-    for (int j = 0; j < 8; j++) {
+  for( uint8_t i = 1; i < 23; i++) {
+    for (uint8_t j = 0; j < 8; j++) {
       // test data bit, incr data size limit
       uint16_t bitValue = dataValue & (1 << dataBitCounter);
       dataBitCounter++;
@@ -48,19 +48,20 @@ void buildPacket(uint8_t * outPacket, stick_values_t * values) {
           dataValue = ((uint16_t*)values)[channelCounter];
         } else {
           // Fill non-TX generated channels with midpoint
-          dataValue = (SBUS_MAX_VALUE - SBUS_MIN_VALUE) / 2;
+          dataValue = SBUS_MID_VALUE;
         }
       }
     }
   }
 }
 
-uint16_t translateFlyskyChannelValueToSbus(uint16_t value) {
-  int32_t channel = value;
-  channel = channel - 1000;
-  if (channel < 0) {
+uint16_t translateFlyskyChannelValueToSbus(uint16_t channel) {
+  if(channel < 1000) {
     channel = 0;
+  } else {
+    channel = channel - 1000;
   }
-  
-  return channel * 1600 / 1000 + 192;
+
+  // Make sacrifices, correct scaling factor is 1.6, but it runs sooo slow in AVRs
+  return channel << 2;
 }

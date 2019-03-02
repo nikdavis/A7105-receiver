@@ -18,49 +18,40 @@ bool packet_valid() {
   return !((value & (1 << 6)) || (value & (1 << 5)));
 }
 
-void readFromRx(uint8_t * packetBuffer) {
-    uint8_t rawPacket[38];
-    
-    if (channel > 15) { // this code runs once every ~120 msec
-        channel = 0;
-    }
-    
+void setupRx() {
     noInterrupts();
     writeSingleByte(A7105_STANDBY);
     writeRegister(A7105_0F_PLL_I, my_channels[channel]);
     writeSingleByte(A7105_RX);
     interrupts();
-    delayMicroseconds(140);
-    
-    while (1) { // look for data on the current channel
-        noInterrupts()
+}
+
+void readFromRx(uint8_t * packetBuffer) {
+    uint8_t rawPacket[38];
+//
+//    for(int i = 1; i < 5; i++) { // look for data on the current channel
+        noInterrupts();
         uint8_t dataNotReady = readRegister(A7105_00_MODE) & A7105_MODE_TRER_MASK;
         interrupts();
         
         if (!dataNotReady) {
-          noInterrupts()
+          noInterrupts();
           writeSingleByte(A7105_RST_RDPTR);
           readRegisterBytes(0x05, rawPacket, 38);
-          channel++;
+          channel += 3;
           interrupts();
           if (packet_valid() && rawPacket[0] == 0x58) {
             memcpy(packetBuffer, rawPacket, 38); 
           }
-          break;
+//          break;
        }
+//    }
+
+    if (channel > 15) { // this code runs once every ~120 msec
+        channel = channel % 16;
     }
 
-//    // If it's likely we missed a packet, then start walking backwards
-//    // on the hopping frequencies to converge on the next hopping loop
-//    if(elapsedTimeInMicros >= 2000) {
-//      channel--;
-//      if(channel < 0) {
-//        channel = 15;
-//      }
-//    }
-    noInterrupts()
-    writeSingleByte(A7105_STANDBY);
-    interrupts()
+    setupRx();
 }
 
 //returns success or failure
