@@ -1,4 +1,4 @@
-#include <SPI.h>
+#include <stdint.h>
 #include "config.h"
 
 void writeSingleByte(uint8_t value);
@@ -12,3 +12,5 @@ uint8_t readRegister(uint8_t address);
 void readRegisterBytes(uint8_t address, uint8_t* bytes, int numBytes);
 
 void readPayloadBytes(uint8_t* bytes, int numBytes);
+
+void writePayloadBytes(uint8_t* bytes, int numBytes);

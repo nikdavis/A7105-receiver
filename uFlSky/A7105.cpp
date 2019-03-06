@@ -1,16 +1,38 @@
 #include "A7105.h"
 
-uint8_t packet[38];
 static int channel = 0;
+uint8_t rssi = 0;
+bool bound = 0;
+uint32_t rxId = 0x12345678;
+uint32_t txId;
+static uint8_t rxPacket[38];
+bool led = 0;
+uint8_t bindCount = 0;
+
+#define ledPin PIN_B2
+
+//static const uint8_t AFHDS2A_regs[] = {
+//      -1  , 0x42, 0x00, 0x25, 0x00,   -1,   -1, 0x00, 0x00, 0x00, 0xAA, 0x01, 0x00, 0x05, 0x00, 0x50, // 00 - 0f
+//      0x9e, 0x4b, 0x00, 0x02, 0x16, 0x2b, 0x12, 0x4f, 0x62, 0x80,   -1,   -1, 0x2a, 0x32, 0xc3, 0x1f, // 10 - 1f
+//      0x1e,   -1, 0x00,   -1, 0x00, 0x00, 0x3b, 0x00, 0x17, 0x47, 0x80, 0x03, 0x01, 0x45, 0x18, 0x00, // 20 - 2f
+//      0x01, 0x0f // 30 - 31
+//};
 
 static const uint8_t AFHDS2A_regs[] = {
-    -1  , 0x42 | (1<<5), 0x00, 0x25, 0x00,   -1,   -1, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c, 0x05, 0x00, 0x50, // 00 - 0f
-    0x9e, 0x4b, 0x00, 0x02, 0x16, 0x2b, 0x12, 0x4f, 0x62, 0x80,   -1,   -1, 0x2a, 0x32, 0xc3, 0x1f, // 10 - 1f
-    0x1e,   -1, 0x00,   -1, 0x00, 0x00, 0x3b, 0x00, 0x17, 0x47, 0x80, 0x03, 0x01, 0x45, 0x18, 0x00, // 20 - 2f
-    0x01, 0x0f // 30 - 31
+      -1  , 0x42, 0x00, 0x25, 0x00,   -1,   -1, 0x00, 0x00, 0x00, 0xAA, 0x01, 0x00, 0x05, 0x00, 0x50, // 00 - 0f
+      0x9e, 0x4b, 0x00, 0x02, 0x16, 0x2b, 0x12, 0x00, 0x62, 0x80,   -1,   -1, 0x0a, 0x32, 0xc3, 0x1f, // 10 - 1f
+      0x1e,   -1, 0x00,   -1, 0x00, 0x00, 0x3b, 0x00, 0x17, 0x47, 0x80, 0x03, 0x01, 0x45, 0x18, 0x00, // 20 - 2f
+      0x01, 0x0f // 30 - 31
 };
 
+//      -1, 0x42, 0x00, 0x25, 0x00,   -1,   -1, 0x00, 0x00, 0x00, 0x00, 0x01, 0x21, 0x05, 0x00, 0x50
+//    0x9E, 0x4B, 0x00, 0x02, 0x16, 0x2B, 0x12, 0x00, 0x62, 0x00, 0x80, 0x00, 0x0A, 0x32, 0xC3, 0x1F
+//    0x1E, 0xC3, 0x00,   -1, 0x00, 0x00, 0x3B, 0x00, 0x17, 0x47, 0x80, 0x03, 0x01, 0x45, 0x18, 0x00
+//    0x01, 0x0F
+
 static const uint8_t my_channels[] = {0x74, 0x6B, 0x2A, 0x1D, 0x24, 0x91, 0x50, 0x2F, 0x5A, 0x61, 0x13, 0x3B, 0x8B, 0x49, 0x82, 0x55};
+
+static const uint8_t bindChannels[] = { 0x0C, 0x8B };
 
 bool packet_valid() {
   uint8_t value = readRegister(0x00);
@@ -19,9 +41,18 @@ bool packet_valid() {
 }
 
 void setupRx() {
+    uint8_t nextChannel;
     noInterrupts();
     writeSingleByte(A7105_STANDBY);
-    writeRegister(A7105_0F_PLL_I, my_channels[channel]);
+    if(bound) {
+      if (channel > 15) {
+          channel = channel % 16;
+      }
+      nextChannel = my_channels[channel];
+    } else {
+      nextChannel = bindCount % 2 ? bindChannels[0] : bindChannels[1];
+    }
+    writeRegister(A7105_0F_PLL_I, nextChannel);
     writeSingleByte(A7105_RX);
     interrupts();
 }
@@ -31,7 +62,7 @@ void readFromRx(uint8_t * packetBuffer) {
 //
 //    for(int i = 1; i < 5; i++) { // look for data on the current channel
         noInterrupts();
-        uint8_t dataNotReady = readRegister(A7105_00_MODE) & A7105_MODE_TRER_MASK;
+        uint8_t dataNotReady = readRegister(A7105_00_MODE) & A7105_MODE_TRER;
         interrupts();
         
         if (!dataNotReady) {
@@ -43,6 +74,7 @@ void readFromRx(uint8_t * packetBuffer) {
           if (packet_valid() && rawPacket[0] == 0x58) {
             memcpy(packetBuffer, rawPacket, 38); 
           }
+          rssi = readRegister(0x1D);
 //          break;
        }
 //    }
@@ -50,71 +82,75 @@ void readFromRx(uint8_t * packetBuffer) {
     if (channel > 15) { // this code runs once every ~120 msec
         channel = channel % 16;
     }
-
+    writeSingleByte(A7105_STANDBY);
+    rssi = readRegister(0x1D);
     setupRx();
 }
 
-//returns success or failure
-uint8_t rebind()
+void flySky2AReadAndProcess()
 {
 
-    Serial.println("Starting binding");
-    int msElapsed = 0;
+    uint8_t packet[FLYSKY_2A_PAYLOAD_SIZE];
 
-    // binding process
-    uint8_t channel = 0;
-    const uint8_t allowed_ch[] = {0x8B, 0x0C};
-//    const uint8_t allowed_ch[] = {0x0d, 0x8c}; // from deviationtx fw
-    uint8_t found_channel = 0;
+    uint8_t bytesToRead = (bound) ? (9 + 2*FLYSKY_2A_CHANNEL_COUNT) : (11 + FLYSKY_FREQUENCY_COUNT);
+    writeSingleByte(A7105_RST_RDPTR);
+    readRegisterBytes(0x05, packet, bytesToRead);
     
-    while (!found_channel) { // scan through the PLL channels, ~10 msec at a time
+    switch (packet[0]) {
+    case FLYSKY_2A_PACKET_RC_DATA:
+    case FLYSKY_2A_PACKET_FS_SETTINGS: // failsafe settings
+    case FLYSKY_2A_PACKET_SETTINGS: // receiver settings
+//        if (isValidPacket(rxPacket)) {
+//            checkRSSI();
+//
+//            const flySky2ARcDataPkt_t *rcPacket = (const flySky2ARcDataPkt_t*) rxPacket;
+//
+//            if (rcPacket->type == FLYSKY_2A_PACKET_RC_DATA) {
+//                if (payload) {
+//                    memcpy(payload, rcPacket->data, 2*FLYSKY_2A_CHANNEL_COUNT);
+//                }
+//            }
+//        }
+        break;
 
-        if (channel > 1) { // this code runs once every ~120 msec
-            channel = 0;
+    case FLYSKY_2A_PACKET_BIND1:
+    case FLYSKY_2A_PACKET_BIND2:
+        if (!bound) {
+            digitalWrite(PIN_B2, HIGH);
+//            packet[0] = 0xBC;
+//            packet[9] = 0x01;
+
+            flySky2ABindPkt_t *bindPacket = (flySky2ABindPkt_t*) packet;
+
+            if (bindPacket->rfChannelMap[0] != 0xFF) {
+                memcpy(my_channels, bindPacket->rfChannelMap, FLYSKY_FREQUENCY_COUNT); // get TX channels
+            }
+
+            txId = bindPacket->txId;
+            bindPacket->rxId = rxId;
+            memset(bindPacket->rfChannelMap, 0xFF, 26); // erase channelMap and 10 bytes after it
+
+            writeSingleByte(A7105_STANDBY); 
+            writeSingleByte(A7105_RST_WRPTR);
+            writeRegisterBytes(0x05, packet, FLYSKY_2A_PAYLOAD_SIZE);
+            delayMicroseconds(2000);
+            writeSingleByte(A7105_TX);
+            uint8_t modeReg = readRegister(A7105_00_MODE);
+            while (!(((modeReg & A7105_MODE_TRSR) != 0) && ((modeReg & A7105_MODE_TRER) == 0))){
+              modeReg = readRegister(A7105_00_MODE);
+              delayMicroseconds(25);
+            }
+
+            delayMicroseconds(200);
+            digitalWrite(PIN_B2, LOW);
         }
+        break;
 
-        Serial.print("Starting search on ");
-        Serial.println(allowed_ch[channel], HEX);
-        writeSingleByte(A7105_STANDBY);
-        writeRegister(A7105_0F_PLL_I, allowed_ch[channel]);
-        writeSingleByte(A7105_RX);
-
-        while (1) { // look for data on the current channel
-//            Serial.println("inner loop");
-//            Serial.println(msElapsed);
-            if (msElapsed > 10) { // give up on this channel
-                channel++;
-                msElapsed = 0;
-                break;
-            }
-            if (readRegister(A7105_00_MODE) & A7105_MODE_TRER_MASK) {
-              msElapsed++;
-              delayMicroseconds(10000);
-            }
-            else {
-              Serial.println("Received data");
-                writeSingleByte(A7105_RST_RDPTR);
-                readRegisterBytes(0x05, packet, 38);
-                found_channel = 1;
-                break;
-            }
-        }
+    default:
+        break;
     }
-
-    // we now know our PLL channel
-    channel = packet[1];
-    writeSingleByte(A7105_STANDBY);
-
-    for(int i = 0; i < 38; i++) {
-      Serial.println(packet[i], HEX);
-    }
-
-    return 1;
-}
-
-void A7105_reset(void)
-{
-    writeRegister(A7105_reg_mode, 0x00);
+    
+    setupRx();
 }
 
 void A7105_SetPower(int power)
@@ -152,82 +188,29 @@ int afhds2a_init()
     uint8_t if_calibration1;
     uint8_t vco_calibration0;
     uint8_t vco_calibration1;
+    uint16_t timeout = 1000;
 
+    // reset
+    writeRegister(0x00, 0x00);
+    delay(100);
     A7105_ID_write(0x5475c52a);
-    for (i = 0; i < 0x33; i++)
+    for (i = 0; i < sizeof(AFHDS2A_regs); i++)
         if((int8_t)AFHDS2A_regs[i] != -1)
             writeRegister(i, AFHDS2A_regs[i]);
 
     writeSingleByte(A7105_STANDBY);
 
-    //IF Filter Bank Calibration
-    writeRegister(0x02, 1);
-    readRegister(0x02);
-    while(ms < 500) {
-        if(! readRegister(0x02))
-            break;
-        
-        ms++;
-        delayMicroseconds(1000);
-    }
-    if (ms >= 500)
-        return 0;
-    if_calibration1 = readRegister(0x22);
-    if(if_calibration1 & A7105_MASK_FBCF) {
-        //Calibration failed...what do we do?
-        return 0;
-    }
+    writeRegister(A7105_02_CALC, 0x01);
 
-    //VCO Current Calibration
-    writeRegister(0x24, 0x13); //Recomended calibration from A7105 Datasheet
+    while ((readRegister(A7105_02_CALC) != 0) && timeout--) {}
 
-    //VCO Bank Calibration
-    writeRegister(0x26, 0x3b); //Recomended limits from A7105 Datasheet
+    readRegister(A7105_22_IF_CALIB_I);
 
-    //VCO Bank Calibrate channel 0?
-    //Set Channel
-    writeRegister(0x0f, 0); //Should we choose a different channel?
-    //VCO Calibration
-    writeRegister(0x02, 2);
-    ms = 0;
-    while(ms < 500) {
-        if(! readRegister(0x02))
-            break;
-        
-        ms++;
-        delayMicroseconds(1000);
-    }
-    if (ms >= 500)
-        return 0;
-    vco_calibration0 = readRegister(0x25);
-    if (vco_calibration0 & A7105_MASK_VBCF) {
-        //Calibration failed...what do we do?
-        return 0;
-    }
+    writeRegister(A7105_24_VCO_CURCAL, 0x13);
+    writeRegister(A7105_25_VCO_SBCAL_I, 0x09);
 
-    //Calibrate channel 0xa0?
-    //Set Channel
-    writeRegister(0x0f, 0xa0);
-    //VCO Calibration
-    writeRegister(0x02, 2);
-    ms = 0;
-    while(ms < 500) {
-        if(! readRegister(A7105_02_CALC))
-            break;
 
-        ms++;
-        delayMicroseconds(1000);
-    }
-    if (ms >= 500)
-        return 0;
-    vco_calibration1 = readRegister(0x25);
-    if (vco_calibration1 & A7105_MASK_VBCF) {
-        //Calibration failed...what do we do?
-        return 0;
-    }
-
-    //Reset VCO Band calibration
-    writeRegister(0x25, 0x0A);
+    A7105_SetPower(7);
     writeSingleByte(A7105_STANDBY);
     return 1;
 }

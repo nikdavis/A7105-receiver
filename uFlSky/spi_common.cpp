@@ -1,4 +1,5 @@
 #include "spi_common.h"
+#include <SPI.h>
 
 void writeSingleByte(uint8_t value) {
   SPI.beginTransaction(SPISettings(spiClockSpeed, MSBFIRST, SPI_MODE0));
@@ -61,8 +62,3 @@ void readRegisterBytes(uint8_t address, uint8_t* bytes, int numBytes) {
   SPI.endTransaction();
 }
 
-void readPayloadBytes(uint8_t* bytes, int numBytes) {
-  for (int i = 0; i < numBytes; i++) {
-    bytes[i] = SPI.transfer(0);
-  }
-}

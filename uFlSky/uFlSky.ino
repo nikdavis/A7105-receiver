@@ -8,14 +8,17 @@
  */
 
 #include <HardwareSerial.h>
+#include <SPI.h>
+#include "config.h"
 
 extern "C" {
   #include "sbus.h"
 }
-#include "spi_common.h"
-#include "A7105.h"
+//#include "spi_common.h"
+//#include "A7105.h"
+#include "afhds2a.h"
+#include <avr/io.h> 
 
-static uint8_t rxPacket[38];
 static uint8_t sbusPacket[25];
 bool ledState = 0;
 bool sendSbusPacket = 1;
@@ -23,7 +26,6 @@ bool packetReady = 0;
 
 void setup() {
   Serial.begin(100000);
-  // start the SPI library:
   SPI.begin();
   pinMode(chipSelectPin, OUTPUT);
   digitalWrite(chipSelectPin, HIGH);
@@ -36,7 +38,8 @@ void setup() {
   delay(50);
   digitalWrite(ledPin, LOW);
   delay(200);
-  int retval = afhds2a_init();
+//  int retval = afhds2a_init();
+  flySkyInit();
   if(retval == 0) {
     while(1) {
       digitalWrite(ledPin, LOW);
@@ -45,30 +48,35 @@ void setup() {
       delay(700);
     }
   }
-  digitalWrite(ledPin, retval);
+  switchClock(0, 1);
+  digitalWrite(ledPin, HIGH);
   initDefaults(&stick_values);
-  setupTimer1FourteenMs();
+//  setupTimer1FourteenMs();
   setupWtrInterrupt();
   setupRx();
+  LINCR = 0;
+  LINBTR = _BV(LDISR) & ~0x1F;
+  LINBTR |= 8;
+  LINBRR = 9;
+  LINCR |= 1 << LENA | 1 << LCMD0 | 1 << LCMD2;
 }
 
 void loop() {
   if(packetReady) {
-    readFromRx(rxPacket);
+    flySky2AReadAndProcess();
     packetReady = 0;
-  }
-  
-  if(sendSbusPacket) {
-    writeSbusPacket();
-    sendSbusPacket = 0;
   }
 }
 
-void writeSbusPacket() {
-  readChannels(rxPacket, &stick_values);
-  buildPacket(sbusPacket, &stick_values);
-  Serial.write(sbusPacket, 25);
-}
+//void writeSbusPacket() {
+//  readChannels(rxPacket, &stick_values);
+//  if(STUFF_RSSI) {
+//    stuffRssiChannel(&stick_values, rssi);
+//  }
+//  buildPacket(sbusPacket, &stick_values);
+//
+//  Serial.write(sbusPacket, 25);
+//}
 
 
 
@@ -98,15 +106,66 @@ void setupWtrInterrupt() {
     interrupts();
 }
 
+void A7105PauseInt() {
+  PCICR &= ~0x1;
+}
+
+void A7105ResumeInt() {
+  PCICR |= 0x1;
+}
+
 ISR(PCINT0_vect) // handle pin change interrupt for D8 to D13 here
 {    
   bool val = digitalRead(wtrPin);
-  digitalWrite(ledPin, ledState);
-  ledState = !ledState;
+//  digitalWrite(ledPin, ledState);
+//  ledState = !ledState;
   if(!val) {
     packetReady = 1;
   }
   PCIFR = 0x1;
+}
+
+void switchClock(uint8_t clk_number, uint8_t sut) {
+  uint8_t previous_clk, temp;
+  
+  // Disable interrupts
+  temp = SREG; asm ("cli");
+  
+  // Save the current system clock source
+  CLKCSR = 1 << CLKCCE;
+  CLKCSR = CLOCK_RECOVER;
+  previous_clk = CLKSELR & 0x0F;
+  
+  // Enable the new clock source
+  CLKSELR = ((sut << 4 ) & 0x30) | (clk_number & 0x0F);
+  CLKCSR = 1 << CLKCCE;
+  CLKCSR = CLOCK_ENABLE;
+
+  CLKCSR = 1 << CLKCCE;
+  CLKCSR = CLOCK_REQ_AVAIL;
+  
+  // Wait for clock validity
+  while ((CLKCSR & (1 << CLKRDY)) == 0);
+  
+  // Switch clock source
+  CLKCSR = 1 << CLKCCE;
+  CLKCSR = CLOCK_SWITCH;
+  
+  // Wait for effective switching
+  while (1){
+    CLKCSR = 1 << CLKCCE;
+    CLKCSR = CLOCK_RECOVER;
+    if ((CLKSELR & 0x0F) == (clk_number & 0x0F)) break;
+  }
+  
+  // Shut down unneeded clock source
+  if (previous_clk != (clk_number & 0x0F)) {
+    CLKSELR = previous_clk;
+    CLKCSR = 1 << CLKCCE;
+    CLKCSR = CLOCK_DISABLE;
+  }
+  // Re-enable interrupts
+  SREG = temp;
 }
 
 

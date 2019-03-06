@@ -19,6 +19,21 @@
 
 #include "spi_common.h"
 
+#define FLYSKY_2A_PAYLOAD_SIZE 37
+#define FLYSKY_2A_CHANNEL_COUNT 14
+#define FLYSKY_FREQUENCY_COUNT 16
+
+enum {
+    FLYSKY_2A_PACKET_RC_DATA = 0x58,
+    FLYSKY_2A_PACKET_BIND1 = 0xBB,
+    FLYSKY_2A_PACKET_BIND2 = 0xBC,
+    FLYSKY_2A_PACKET_FS_SETTINGS = 0x56,
+    FLYSKY_2A_PACKET_SETTINGS = 0xAA,
+    FLYSKY_2A_PACKET_TELEMETRY = 0xAA,
+    FLYSKY_PACKET_RC_DATA = 0x55,
+    FLYSKY_PACKET_BIND = 0xAA
+};
+
 #define A7105_SLEEP      0x80
 #define A7105_IDLE       0x90
 #define A7105_STANDBY    0xA0
@@ -81,7 +96,13 @@
 #define A7105_31_RSCALE        0x31
 #define A7105_32_FILTER_TEST   0x32
 
-#define A7105_MODE_TRER_MASK  (uint8_t)(1 << 0) // TRX is enabled
+#define A7105_MODE_FECF        0x40    // [0]: FEC pass. [1]: FEC error. (FECF is read only, it is updated internally while receiving every packet.)
+#define A7105_MODE_CRCF        0x20    // [0]: CRC pass. [1]: CRC error. (CRCF is read only, it is updated internally while receiving every packet.)
+#define A7105_MODE_CER         0x10    // [0]: RF chip is disabled. [1]: RF chip is enabled.
+#define A7105_MODE_XER         0x08    // [0]: Crystal oscillator is disabled. [1]: Crystal oscillator is enabled.
+#define A7105_MODE_PLLER       0x04    // [0]: PLL is disabled. [1]: PLL is enabled.
+#define A7105_MODE_TRSR        0x02    // [0]: RX state. [1]: TX state. Serviceable if TRER=1 (TRX is enable).
+#define A7105_MODE_TRER        0x01    // [0]: TRX is disabled. [1]: TRX is enabled.
 
 enum A7105_reg {
     A7105_reg_mode = 0x00,
@@ -158,12 +179,47 @@ enum A7105_mode {
     slave
 };
 
+typedef struct __attribute__((packed)) {
+    uint8_t type;
+    uint8_t number;
+    uint8_t valueL;
+    uint8_t valueH;
+} flySky2ASens_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t type;
+    uint32_t txId;
+    uint32_t rxId;
+    flySky2ASens_t sens[7];
+} flySky2ATelemetryPkt_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t type;
+    uint32_t txId;
+    uint32_t rxId;
+    uint8_t state;
+    uint8_t reserved1;
+    uint8_t rfChannelMap[16];
+    uint8_t reserved2[10];
+} flySky2ABindPkt_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t type;
+    uint32_t txId;
+    uint32_t rxId;
+    uint8_t data[28];
+} flySky2ARcDataPkt_t;
+
 // This can't easily be configured dynamically. 1 for 500kHz, 0 for 250kHz
 #define CHNL_WIDTH 1
 
+extern uint8_t rssi;
+
+void writeMagicResponse();
+
 void setupRx();
 
-uint8_t rebind();
+void flySky2AReadAndProcess();
 
 void readFromRx(uint8_t * packetBuffer);
 

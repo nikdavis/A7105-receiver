@@ -1,12 +1,15 @@
 #define NUMBER_OF_TX_CHANNELS 14
 #define SBUS_MIN_VALUE 192
 #define SBUS_MAX_VALUE 1792
-#define SBUS_MID_VALUE 961;
+#define SBUS_MID_VALUE 992;
 #define PACKET_PERIOD_MS 14
 #define PACKET_PERIOD_HIGH_SPEED_MS 7
 
 #include <stdint.h>
 #include <stdio.h>
+
+#define STUFF_RSSI true
+#define RSSI_AUX_CHANNEL 10
 
 // Requires AETR (default on FS-I6)
 // Flysky default values
@@ -20,6 +23,8 @@ extern stick_values_t stick_values;
 void initDefaults(stick_values_t * values);
 
 void readChannels(uint8_t * rxPacket, stick_values_t * values);
+
+void stuffRssiChannel(stick_values_t * values, uint8_t rssi);
 
 void buildPacket(uint8_t * outPacket, stick_values_t * values);
 

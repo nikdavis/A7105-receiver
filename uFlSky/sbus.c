@@ -3,8 +3,33 @@
 stick_values_t stick_values;
 
 void initDefaults(stick_values_t * values) {
-  stick_values.roll = stick_values.pitch = stick_values.yaw = 992;
-  stick_values.throttle = 192;
+  stick_values.roll = stick_values.pitch = stick_values.yaw = SBUS_MID_VALUE;
+  stick_values.throttle = SBUS_MIN_VALUE;
+  for(uint8_t i = 0; i < 10; i++) {
+    stick_values.aux[i] = SBUS_MID_VALUE;
+  }
+}
+
+// Maps RSSI (5 high to 160 low) to 0 - 100 % -- RSSI already linear with dBm
+// represents -105 to -45 dBm +/- 6dBm. Max readings can
+// represent -45 dBm - 0 dBm. The A7105 doesn't differentiate
+// measurements higher than -45 dBm.
+uint16_t mapRssiToSbusChannel(uint8_t value) {
+  uint8_t maxRssiVal = 160;
+  uint8_t minRssiVal = 5;
+  if(value > maxRssiVal) {
+    value = maxRssiVal;
+  }
+  if(value < minRssiVal) {
+    value = minRssiVal;
+  }
+  uint16_t output = maxRssiVal - value; // invert scale
+  output = output * 31 / 3 + SBUS_MIN_VALUE; // (map range of 155 to 1601.6, offset by min SBUS value)
+  return output;
+}
+
+void stuffRssiChannel(stick_values_t * values, uint8_t rssi) {
+  (*values).aux[RSSI_AUX_CHANNEL-1] = mapRssiToSbusChannel(rssi);
 }
 
 // Read out 14 channels
@@ -55,7 +80,8 @@ void buildPacket(uint8_t * outPacket, stick_values_t * values) {
   }
 }
 
-uint16_t translateFlyskyChannelValueToSbus(uint16_t channel) {
+uint16_t translateFlyskyChannelValueToSbus(uint16_t value) {
+  uint16_t channel = value;
   if(channel < 1000) {
     channel = 0;
   } else {
@@ -63,5 +89,5 @@ uint16_t translateFlyskyChannelValueToSbus(uint16_t channel) {
   }
 
   // Make sacrifices, correct scaling factor is 1.6, but it runs sooo slow in AVRs
-  return channel << 2;
+  return channel * 8 / 5 + 192;
 }
