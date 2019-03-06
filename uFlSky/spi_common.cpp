@@ -1,4 +1,4 @@
-#include "spi_common.h"
+#include "spi_common.hpp"
 #include <SPI.h>
 
 void writeSingleByte(uint8_t value) {
@@ -11,7 +11,7 @@ void writeSingleByte(uint8_t value) {
   SPI.endTransaction();
 }
 
-void writeRegister(uint8_t address, uint8_t value) {
+extern "C" void writeRegister(uint8_t address, uint8_t value) {
   SPI.beginTransaction(SPISettings(spiClockSpeed, MSBFIRST, SPI_MODE0));
   digitalWrite(chipSelectPin, LOW);
 

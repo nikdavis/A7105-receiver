@@ -13,6 +13,7 @@
 
 extern "C" {
   #include "sbus.h"
+  #include "afhds2a.h"
 }
 //#include "spi_common.h"
 //#include "A7105.h"
@@ -20,11 +21,13 @@ extern "C" {
 #include <avr/io.h> 
 
 static uint8_t sbusPacket[25];
+static uint8_t rxPacket[38];
 bool ledState = 0;
 bool sendSbusPacket = 1;
 bool packetReady = 0;
 
 void setup() {
+  bool retval = 0;
   Serial.begin(100000);
   SPI.begin();
   pinMode(chipSelectPin, OUTPUT);
@@ -38,7 +41,6 @@ void setup() {
   delay(50);
   digitalWrite(ledPin, LOW);
   delay(200);
-//  int retval = afhds2a_init();
   flySkyInit();
   if(retval == 0) {
     while(1) {
@@ -53,17 +55,12 @@ void setup() {
   initDefaults(&stick_values);
 //  setupTimer1FourteenMs();
   setupWtrInterrupt();
-  setupRx();
-  LINCR = 0;
-  LINBTR = _BV(LDISR) & ~0x1F;
-  LINBTR |= 8;
-  LINBRR = 9;
-  LINCR |= 1 << LENA | 1 << LCMD0 | 1 << LCMD2;
+  fixUartBaud();
 }
 
 void loop() {
   if(packetReady) {
-    flySky2AReadAndProcess();
+    flySkyDataReceived(rxPacket);
     packetReady = 0;
   }
 }
@@ -79,7 +76,13 @@ void loop() {
 //}
 
 
-
+void fixUartBaud() {
+  LINCR = 0;
+  LINBTR = _BV(LDISR) & ~0x1F;
+  LINBTR |= 8;
+  LINBRR = 9;
+  LINCR |= 1 << LENA | 1 << LCMD0 | 1 << LCMD2;
+}
 void setupTimer1FourteenMs() {
   noInterrupts();
   TCCR1A = 0;
