@@ -1,9 +1,16 @@
-//#include <pins_arduino.h>
 #include <Arduino.h>
 
-#define chipSelectPin PIN_A6
-#define ledPin PIN_B2
-#define wtrPin PIN_A0
+//#define TEENSY_LC
+
+#ifdef TEENSY_LC
+  #define chipSelectPin 10
+  #define ledPin -1
+  #define wtrPin -1
+#else
+  #define chipSelectPin PIN_A6
+  #define ledPin PIN_B2
+  #define wtrPin PIN_A0
+#endif
 
 #define CLOCK_RECOVER 0x05
 #define CLOCK_ENABLE 0x02

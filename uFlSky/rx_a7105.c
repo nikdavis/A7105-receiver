@@ -29,33 +29,61 @@
 static volatile uint32_t timeEvent = 0;
 static volatile bool occurEvent = false;
 
-void A7105IntHandler()
-{
-  bool val = digitalRead(wtrPin);
-    if (val == 0) {
-        timeEvent = micros();
-        occurEvent = true;
-    }
-}
+#ifdef TEENSY_LC
+  void A7105PauseInt() {
+    // TODO
+  }
+  
+  void A7105ResumeInt() {
+    // TODO
+  }
+  
+  void A7105Init(uint32_t id)
+  {
+      pinMode(wtrPin, INPUT);
+      A7105PauseInt();
+  
+      A7105SoftReset();
+      A7105WriteID(id);
+  }
 
-void A7105PauseInt() {
-  PCICR &= ~0x1;
-}
+  void A7105IntHandler()
+  {
+    // Teensy board does not have GPIO1 / WTR interrupt broken out, so we just need
+    // to assume something happens. Can eventually read / check for RX/TX action?
+    timeEvent = micros();
+    occurEvent = true;
+  }
+#else // AVR
+  void A7105PauseInt() {
+    PCICR &= ~0x1;
+  }
+  
+  void A7105ResumeInt() {
+    PCICR |= 0x1;
+  }
+  
+  void A7105Init(uint32_t id)
+  {
+      pinMode(wtrPin, INPUT);
+      PCMSK0 = 0x1; // only enable desired pin for interrupt
+      PCIFR = 0x1;
+      A7105PauseInt();
+  
+      A7105SoftReset();
+      A7105WriteID(id);
+  }
 
-void A7105ResumeInt() {
-  PCICR |= 0x1;
-}
+  void A7105IntHandler()
+  {
+    bool val = digitalRead(wtrPin);
+      if (val == 0) {
+          timeEvent = micros();
+          occurEvent = true;
+      }
+  }
+#endif
 
-void A7105Init(uint32_t id)
-{
-    pinMode(wtrPin, INPUT);
-    PCMSK0 = 0x1; // only enable desired pin for interrupt
-    PCIFR = 0x1;
-    A7105PauseInt();
-
-    A7105SoftReset();
-    A7105WriteID(id);
-}
 
 void A7105Config(const uint8_t *regsTable, uint8_t size)
 {

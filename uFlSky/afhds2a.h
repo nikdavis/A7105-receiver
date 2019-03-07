@@ -20,6 +20,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "config.h"
 
 #pragma once
 
@@ -32,3 +33,7 @@ struct rxRuntimeConfig_s;
 bool flySkyInit();
 void flySkySetRcDataFromPayload(uint16_t *rcData, const uint8_t *payload);
 bool flySkyDataReceived(uint8_t *payload);
+
+#ifdef TEENSY_LC
+  void _println(const char * bytes);
+#endif

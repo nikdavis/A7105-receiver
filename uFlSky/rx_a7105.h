@@ -18,6 +18,8 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
+
 /* A7105 states for strobe */
 typedef enum {
     A7105_SLEEP = 0x80,

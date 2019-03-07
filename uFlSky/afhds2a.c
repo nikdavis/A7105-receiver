@@ -23,6 +23,7 @@
 #include "afhds2a_defs.h"
 #include "afhds2a.h"
 #include "rx_a7105.h"
+#include "config.h"
 
 static const uint8_t flySkyRegs[] = {
     0xff, 0x42, 0x00, 0x14, 0x00, 0xff, 0xff, 0x00,
@@ -36,7 +37,7 @@ static const uint8_t flySkyRegs[] = {
 
 static const uint8_t flySky2ARegs[] = {
     0xff, 0x62, 0x00, 0x25, 0x00, 0xff, 0xff, 0x00,
-    0x00, 0x00, 0xAA, 0x01, 0x19, 0x05, 0x00, 0x50,
+    0x00, 0x00, 0xAA, 0x01, 0x00, 0x05, 0x00, 0x50,
     0x9e, 0x4b, 0x00, 0x02, 0x16, 0x2b, 0x12, 0x4f,
     0x62, 0x80, 0xff, 0xff, 0x2a, 0x32, 0xc3, 0x1f,
     0x1e, 0xff, 0x00, 0xff, 0x00, 0x00, 0x3b, 0x00,
@@ -70,6 +71,7 @@ static const uint8_t flySkyRfChannels[16][16] = {
 const timings_t flySkyTimings = {.packet = 1500, .firstPacket = 1900, .syncPacket = 2250, .telemetry = 0xFFFFFFFF};
 const timings_t flySky2ATimings = {.packet = 3850, .firstPacket = 4850, .syncPacket = 5775, .telemetry = 57000};
 
+//static flySkyConfig_t flySkyConfig = { .txId = 0x773C92F1, .rfChannelMap = {0x74, 0x6B, 0x2A, 0x1D, 0x24, 0x91, 0x50, 0x2F, 0x5A, 0x61, 0x13, 0x3B, 0x8B, 0x49, 0x82, 0x55} };
 static flySkyConfig_t flySkyConfig;
 static const timings_t *timings = &flySky2ATimings;
 static uint32_t timeout = 0;
@@ -86,6 +88,15 @@ static bool waitTx = false;
 static uint16_t errorRate = 0;
 static uint16_t rssi_dBm = 0;
 static uint8_t rfChannelMap[FLYSKY_FREQUENCY_COUNT] = {0};
+
+bool ledState;
+
+void flashLed() {
+  digitalWrite(ledPin, 0);
+  delay(50);
+  digitalWrite(ledPin, 1);
+  delay(50);
+}
 
 static uint8_t getNextChannel(uint8_t step)
 {
@@ -175,6 +186,7 @@ static void checkRSSI(void)
 
 static bool isValidPacket(const uint8_t *packet) {
     const flySky2ARcDataPkt_t *rcPacket = (const flySky2ARcDataPkt_t*) packet;
+    
     return (rcPacket->rxId == rxId && rcPacket->txId == txId);
 }
 
@@ -252,6 +264,10 @@ static bool flySky2AReadAndProcess(uint8_t *payload, const uint32_t timeStamp)
 
     case FLYSKY_2A_PACKET_BIND1:
     case FLYSKY_2A_PACKET_BIND2:
+#ifndef TEENSY_LC
+        digitalWrite(ledPin, ledState);
+        ledState = !ledState;
+#endif
         if (!bound) {
             resetTimeout(timeStamp);
 
@@ -270,6 +286,9 @@ static bool flySky2AReadAndProcess(uint8_t *payload, const uint32_t timeStamp)
 
             A7105WriteFIFO(packet, FLYSKY_2A_PAYLOAD_SIZE);
         }
+#ifndef TEENSY_LC
+        digitalWrite(ledPin, ledState);
+#endif
         break;
 
     default:
@@ -279,44 +298,6 @@ static bool flySky2AReadAndProcess(uint8_t *payload, const uint32_t timeStamp)
     if (!waitTx){
         A7105Strobe(A7105_RX);
     }
-    return result;
-}
-
-static bool flySkyReadAndProcess(uint8_t *payload, const uint32_t timeStamp)
-{
-    bool result = false;
-    uint8_t packet[FLYSKY_PAYLOAD_SIZE];
-
-    uint8_t bytesToRead = (bound) ? (5 + 2*FLYSKY_CHANNEL_COUNT) : (5);
-    A7105ReadFIFO(packet, bytesToRead);
-
-    const flySkyRcDataPkt_t *rcPacket = (const flySkyRcDataPkt_t*) packet;
-
-    if (bound && rcPacket->type == FLYSKY_PACKET_RC_DATA && rcPacket->txId == txId) {
-        checkRSSI();
-        resetTimeout(timeStamp);
-
-        if (payload) {
-            memcpy(payload, rcPacket->data, 2*FLYSKY_CHANNEL_COUNT);
-        }
-
-        A7105WriteReg(A7105_0F_CHANNEL, getNextChannel(1));
-
-        result = true;
-    }
-
-    if (!bound && rcPacket->type == FLYSKY_PACKET_BIND) {
-        resetTimeout(timeStamp);
-
-        txId = rcPacket->txId;
-        flySkyCalculateRfChannels();
-
-        A7105WriteReg(A7105_0F_CHANNEL, getNextChannel(0));
-
-        timeLastBind = timeStamp;
-    }
-
-    A7105Strobe(A7105_RX);
     return result;
 }
 
@@ -338,6 +319,7 @@ bool flySkyInit(void)
         memcpy (rfChannelMap, flySkyConfig.rfChannelMap, FLYSKY_FREQUENCY_COUNT);// load channel map
         startRxChannel = getNextChannel(0);
     }
+    bound = false;
 
     A7105WriteReg(A7105_0F_CHANNEL, startRxChannel);
     A7105Strobe(A7105_RX); // start listening
@@ -382,6 +364,12 @@ bool flySkyDataReceived(uint8_t *payload)
 
     if (waitTx && (micros() - timeTxRequest) > TX_DELAY) {
         A7105Strobe(A7105_TX);
+        // Delay for TX since we can't interrupt on its finish
+        uint8_t modeReg = readRegister(A7105_00_MODE);
+        while(!(((modeReg & A7105_MODE_TRSR) != 0) && ((modeReg & A7105_MODE_TRER) == 0))) {
+          delayMicroseconds(100);
+          modeReg = readRegister(A7105_00_MODE);
+        }
         waitTx = false;
     }
 

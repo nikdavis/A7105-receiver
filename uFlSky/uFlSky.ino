@@ -14,15 +14,15 @@
 extern "C" {
   #include "sbus.h"
   #include "afhds2a.h"
+  #include "rx_a7105.h"
 }
 //#include "spi_common.h"
 //#include "A7105.h"
-#include "afhds2a.h"
 #include <avr/io.h> 
 
 static uint8_t sbusPacket[25];
 static uint8_t rxPacket[38];
-bool ledState = 0;
+extern bool ledState = 0;
 bool sendSbusPacket = 1;
 bool packetReady = 0;
 
@@ -41,7 +41,7 @@ void setup() {
   delay(50);
   digitalWrite(ledPin, LOW);
   delay(200);
-  flySkyInit();
+  retval = flySkyInit();
   if(retval == 0) {
     while(1) {
       digitalWrite(ledPin, LOW);
@@ -50,19 +50,29 @@ void setup() {
       delay(700);
     }
   }
+#ifndef TEENSY_LC
   switchClock(0, 1);
+  fixUartBaud();
+#endif
   digitalWrite(ledPin, HIGH);
   initDefaults(&stick_values);
 //  setupTimer1FourteenMs();
-  setupWtrInterrupt();
-  fixUartBaud();
+}
+
+
+void flashLed() {
+  digitalWrite(ledPin, 0);
+  delay(50);
+  digitalWrite(ledPin, 1);
+  delay(50);
 }
 
 void loop() {
-  if(packetReady) {
-    flySkyDataReceived(rxPacket);
-    packetReady = 0;
-  }
+//#ifdef TEENSY_LC
+  delayMicroseconds(100);
+  A7105IntHandler();
+//#endif
+  flySkyDataReceived(rxPacket);
 }
 
 //void writeSbusPacket() {
@@ -75,6 +85,10 @@ void loop() {
 //  Serial.write(sbusPacket, 25);
 //}
 
+#ifdef TEENSY_LC
+
+
+#else
 
 void fixUartBaud() {
   LINCR = 0;
@@ -99,34 +113,11 @@ ISR(TIMER1_COMPA_vect){
  sendSbusPacket = 1;
 }
 
-// Falling edge when RX or TX are complete
-void setupWtrInterrupt() {
-    noInterrupts();
-    pinMode(wtrPin, INPUT);
-    PCMSK0 = 0x1; // only enable desired pin for interrupt
-    PCICR = 0x1; // enable PCIINT0 pins interrupt
-    PCIFR = 0x1;
-    interrupts();
-}
-
-void A7105PauseInt() {
-  PCICR &= ~0x1;
-}
-
-void A7105ResumeInt() {
-  PCICR |= 0x1;
-}
-
-ISR(PCINT0_vect) // handle pin change interrupt for D8 to D13 here
-{    
-  bool val = digitalRead(wtrPin);
-//  digitalWrite(ledPin, ledState);
-//  ledState = !ledState;
-  if(!val) {
-    packetReady = 1;
-  }
-  PCIFR = 0x1;
-}
+//ISR(PCINT0_vect) // handle pin change interrupt for D8 to D13 here
+//{    
+//  A7105IntHandler();
+//  PCIFR = 0x1;
+//}
 
 void switchClock(uint8_t clk_number, uint8_t sut) {
   uint8_t previous_clk, temp;
@@ -171,4 +162,5 @@ void switchClock(uint8_t clk_number, uint8_t sut) {
   SREG = temp;
 }
 
+#endif
 
