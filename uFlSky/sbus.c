@@ -36,7 +36,9 @@ void stuffRssiChannel(stick_values_t * values, uint8_t rssi) {
 void readChannels(uint8_t * rxPacket, stick_values_t * values) {
   uint8_t channelOffset = 9;
   for (uint8_t i = 0; i < NUMBER_OF_TX_CHANNELS; i++) {
-    uint8_t index = i * 2 + channelOffset;
+//    uint8_t index = i * 2 + channelOffset;
+    // Using BF FW, we get channels directly -- no offset
+    uint8_t index = i * 2;
     uint16_t rawChannel = rxPacket[index + 1] << 8;
     rawChannel = rawChannel | rxPacket[index];
     ((uint16_t*)values)[i] = translateFlyskyChannelValueToSbus(rawChannel);
@@ -88,6 +90,5 @@ uint16_t translateFlyskyChannelValueToSbus(uint16_t value) {
     channel = channel - 1000;
   }
 
-  // Make sacrifices, correct scaling factor is 1.6, but it runs sooo slow in AVRs
   return channel * 8 / 5 + 192;
 }

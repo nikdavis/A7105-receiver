@@ -77,10 +77,10 @@ static volatile bool occurEvent = false;
   void A7105IntHandler()
   {
     bool val = digitalRead(wtrPin);
-      if (val == 0) {
-          timeEvent = micros();
-          occurEvent = true;
-      }
+    if (val == 0) {
+        timeEvent = micros();
+        occurEvent = true;
+    }
   }
 #endif
 

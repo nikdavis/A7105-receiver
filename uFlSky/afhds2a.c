@@ -257,7 +257,7 @@ static bool flySky2AReadAndProcess(uint8_t *payload, const uint32_t timeStamp)
             }
 
             if (!waitTx) {
-                A7105WriteReg(A7105_0F_CHANNEL, getNextChannel(1));
+                A7105WriteReg(A7105_0F_CHANNEL, getNextChannel(3));
             }
         }
         break;
@@ -267,6 +267,7 @@ static bool flySky2AReadAndProcess(uint8_t *payload, const uint32_t timeStamp)
 #ifndef TEENSY_LC
         digitalWrite(ledPin, ledState);
         ledState = !ledState;
+//            delay(10);
 #endif
         if (!bound) {
             resetTimeout(timeStamp);
@@ -364,12 +365,6 @@ bool flySkyDataReceived(uint8_t *payload)
 
     if (waitTx && (micros() - timeTxRequest) > TX_DELAY) {
         A7105Strobe(A7105_TX);
-        // Delay for TX since we can't interrupt on its finish
-        uint8_t modeReg = readRegister(A7105_00_MODE);
-        while(!(((modeReg & A7105_MODE_TRSR) != 0) && ((modeReg & A7105_MODE_TRER) == 0))) {
-          delayMicroseconds(100);
-          modeReg = readRegister(A7105_00_MODE);
-        }
         waitTx = false;
     }
 

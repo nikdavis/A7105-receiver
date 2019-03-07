@@ -20,11 +20,12 @@ extern "C" {
 //#include "A7105.h"
 #include <avr/io.h> 
 
-static uint8_t sbusPacket[25];
-static uint8_t rxPacket[38];
 extern bool ledState = 0;
 bool sendSbusPacket = 1;
 bool packetReady = 0;
+uint8_t rxPacket[38];
+uint8_t sbusPacket[25];
+long sbusTimer = 0;
 
 void setup() {
   bool retval = 0;
@@ -57,6 +58,7 @@ void setup() {
   digitalWrite(ledPin, HIGH);
   initDefaults(&stick_values);
 //  setupTimer1FourteenMs();
+  sbusTimer = millis();
 }
 
 
@@ -68,11 +70,22 @@ void flashLed() {
 }
 
 void loop() {
-//#ifdef TEENSY_LC
+#ifdef TEENSY_LC
   delayMicroseconds(100);
   A7105IntHandler();
-//#endif
-  flySkyDataReceived(rxPacket);
+#endif
+  if(flySkyDataReceived(rxPacket)) {
+    packetReady = true;
+  }
+  if((millis() - sbusTimer) >= sbusPacketPeriodMs) {
+    if(packetReady) {
+      packetReady = false;
+      readChannels(rxPacket, &stick_values);
+    }
+    buildPacket(sbusPacket, &stick_values);
+    Serial.write(sbusPacket, 25);
+    sbusTimer = millis();
+  }
 }
 
 //void writeSbusPacket() {
@@ -113,11 +126,11 @@ ISR(TIMER1_COMPA_vect){
  sendSbusPacket = 1;
 }
 
-//ISR(PCINT0_vect) // handle pin change interrupt for D8 to D13 here
-//{    
-//  A7105IntHandler();
-//  PCIFR = 0x1;
-//}
+ISR(PCINT0_vect) // handle pin change interrupt for D8 to D13 here
+{    
+  A7105IntHandler();
+  PCIFR = 0x1;
+}
 
 void switchClock(uint8_t clk_number, uint8_t sut) {
   uint8_t previous_clk, temp;

@@ -18,9 +18,10 @@
 #define CLOCK_REQ_AVAIL 0x03
 #define CLOCK_DISABLE 0x01
 
-#define spiClockSpeed 1000000
+#define spiClockSpeed 4000000
 #define waitForRxPacketMicros 2000
 #define failsafeTimeoutMillis 2000
+#define sbusPacketPeriodMs 20
 
 #define setbit(value, i) ((value) |= ((1) << (i)))
 #define clearbit(value, i) ((value) &= ~((1) << (i)))
