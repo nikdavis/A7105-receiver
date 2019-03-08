@@ -246,12 +246,12 @@ static bool flySky2AReadAndProcess(uint8_t *payload, const uint32_t timeStamp)
                     memcpy(payload, rcPacket->data, 2*FLYSKY_2A_CHANNEL_COUNT);
                 }
 
-                if (sendTelemetry) {
-                    buildAndWriteTelemetry(packet);
-                    sendTelemetry = false;
-                    timeTxRequest = timeStamp;
-                    waitTx = true;
-                }
+//                if (sendTelemetry) {
+//                    buildAndWriteTelemetry(packet);
+//                    sendTelemetry = false;
+//                    timeTxRequest = timeStamp;
+//                    waitTx = true;
+//                }
 
                 result = true;
             }
@@ -352,7 +352,7 @@ bool flySkyDataReceived(uint8_t *payload)
 
         if (((modeReg & A7105_MODE_TRSR) != 0) && ((modeReg & A7105_MODE_TRER) == 0)) { // TX complete
             if (bound) {
-                A7105WriteReg(A7105_0F_CHANNEL, getNextChannel(1));
+                A7105WriteReg(A7105_0F_CHANNEL, getNextChannel(3));
             }
             A7105Strobe(A7105_RX);
         } else if ((modeReg & (A7105_MODE_CRCF|A7105_MODE_TRER)) == 0) { // RX complete, CRC pass

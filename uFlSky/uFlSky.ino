@@ -26,6 +26,7 @@ bool packetReady = 0;
 uint8_t rxPacket[38];
 uint8_t sbusPacket[25];
 long sbusTimer = 0;
+long failsafeTimer = 0;
 
 void setup() {
   bool retval = 0;
@@ -81,10 +82,16 @@ void loop() {
     if(packetReady) {
       packetReady = false;
       readChannels(rxPacket, &stick_values);
+      failsafeTimer = millis();
     }
     buildPacket(sbusPacket, &stick_values);
     Serial.write(sbusPacket, 25);
     sbusTimer = millis();
+  }
+  if((millis() - failsafeTimer) > failsafeTimeoutMillis) {
+    // Simple timeout -- go back to default values
+    initDefaults(&stick_values);
+    failsafeTimer = millis();
   }
 }
 
